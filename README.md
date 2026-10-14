@@ -15,6 +15,9 @@ Projects pin a release tag (`v1.0.0`); Renovate bumps it.
 ## mise tasks
 
 ```toml
+[settings]
+experimental = true # required for git:: task includes
+
 [task_config]
 includes = [
   "mise-tasks", # keep the project's own file tasks
