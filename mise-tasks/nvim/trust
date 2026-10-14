@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+#MISE description="Trust the project's Neovim config files (.nvim.lua, .lazy.lua) for this checkout"
+set -euo pipefail
+
+# Neovim keys trust by absolute path + content hash, so every new worktree
+# must re-trust these files. Run after creating a worktree.
+
+if ! command -v nvim >/dev/null 2>&1; then
+	echo "⚠️  nvim not found, skipping"
+	exit 0
+fi
+
+files=()
+for file in .nvim.lua .lazy.lua; do
+	[ -f "$file" ] && files+=("$PWD/$file")
+done
+[ ${#files[@]} -gt 0 ] || exit 0
+
+# --clean: files are only opened as buffers, never executed
+nvim --clean --headless \
+	-c 'lua for _, path in ipairs(vim.fn.argv()) do local ok, err = vim.secure.trust({ action = "allow", path = path }) if not ok then io.stderr:write(err .. "\n") vim.cmd("cquit 1") end print("✓ Trusted " .. vim.fn.fnamemodify(path, ":t") .. "\n") end' \
+	-c 'qall!' \
+	"${files[@]}"

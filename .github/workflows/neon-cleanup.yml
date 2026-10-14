@@ -1,0 +1,42 @@
+name: Delete Neon preview branch
+
+# Caller (on: pull_request: types: [closed]):
+#   jobs:
+#     neon-cleanup:
+#       uses: guillaumeLamanda/progenes-tooling/.github/workflows/neon-cleanup.yml@v1
+#       with:
+#         project-id: ${{ vars.NEON_PROJECT_ID }}
+#       secrets:
+#         NEON_API_KEY: ${{ secrets.NEON_API_KEY }}
+
+on:
+  workflow_call:
+    inputs:
+      project-id:
+        description: Neon project id
+        required: true
+        type: string
+      branch-prefix:
+        description: Prefix used by `mise run db:sync` (DB_BRANCH_PREFIX)
+        default: preview/
+        type: string
+      only-merged:
+        description: Keep the branch when the PR is closed without merging
+        default: false
+        type: boolean
+    secrets:
+      NEON_API_KEY:
+        required: true
+
+permissions: {}
+
+jobs:
+  delete-neon-branch:
+    if: ${{ !inputs.only-merged || github.event.pull_request.merged }}
+    runs-on: ubuntu-slim
+    steps:
+      - uses: neondatabase/delete-branch-action@4468d825d5a88ef4012f1705a82f02ec3072f776 # v3
+        with:
+          project_id: ${{ inputs.project-id }}
+          branch: ${{ inputs.branch-prefix }}${{ github.head_ref }}
+          api_key: ${{ secrets.NEON_API_KEY }}

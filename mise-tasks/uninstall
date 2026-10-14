@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+#MISE description="Remove git hooks"
+set -euo pipefail
+
+hk uninstall
+echo "✓ Git hooks removed"

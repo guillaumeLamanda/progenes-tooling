@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+#MISE description="Delete all archived Neon branches (--dry-run to preview)"
+#MISE alias="db:delete-archived"
+set -euo pipefail
+
+PROJECT_ID="${NEON_PROJECT_ID}"
+DRY_RUN=false
+
+if [ "${1:-}" = "--dry-run" ]; then
+	DRY_RUN=true
+	echo "🔍 DRY RUN — no branches will be deleted"
+fi
+
+echo "📋 Fetching archived Neon branches..."
+
+ARCHIVED=$(neon branches list --project-id "$PROJECT_ID" --output json 2>/dev/null | jq -r '.[] | select(.current_state == "archived" and .name != "main") | .name')
+
+if [ -z "$ARCHIVED" ]; then
+	echo "✓ No archived branches found"
+	exit 0
+fi
+
+COUNT=$(echo "$ARCHIVED" | wc -l | tr -d ' ')
+echo "Found $COUNT archived branch(es) to delete:"
+echo "$ARCHIVED" | sed 's/^/  - /'
+echo ""
+
+if [ "$DRY_RUN" = true ]; then
+	exit 0
+fi
+
+read -p "Delete these $COUNT branches? [y/N] " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+	echo "Aborted"
+	exit 0
+fi
+
+FAILED=0
+while IFS= read -r branch; do
+	echo -n "🗑  Deleting $branch... "
+	if neon branches delete "$branch" --project-id "$PROJECT_ID" 2>/dev/null; then
+		echo "✓"
+	else
+		echo "❌"
+		FAILED=$((FAILED + 1))
+	fi
+done <<< "$ARCHIVED"
+
+DELETED=$((COUNT - FAILED))
+echo ""
+echo "Done: $DELETED deleted, $FAILED failed"

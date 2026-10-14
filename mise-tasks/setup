@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+#MISE description="Install tools, git hooks and check CLI authentication"
+set -euo pipefail
+
+echo "🔧 Setting up project..."
+
+echo "📦 Installing tools..."
+mise install
+
+echo "🔗 Installing git hooks..."
+hk install --mise
+
+if [ -z "${NEON_PROJECT_ID:-}" ]; then
+	echo "❌ NEON_PROJECT_ID not set in mise.toml"
+	echo "   Find your project ID: neon projects list"
+	exit 1
+fi
+
+if ! neon projects list >/dev/null 2>&1; then
+	echo "⚠️  Neon CLI not authenticated. Run: neon auth"
+	exit 1
+fi
+
+if ! vc whoami >/dev/null 2>&1; then
+	echo "⚠️  Vercel CLI not authenticated. Run: vc login"
+	exit 1
+fi
+
+echo "✓ Project setup complete"
+echo "  - Manual commands: mise run db:sync, hk check, hk fix"

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Payload CMS projects: hold back Payload patches and Lexical, never automerge Sharp",
+  "packageRules": [
+    {
+      "groupName": "Payload",
+      "matchPackageNames": ["/@payloadcms/*/", "/payload/"],
+      "matchUpdateTypes": ["major", "minor"]
+    },
+    {
+      "groupName": "Payload",
+      "matchPackageNames": ["/@payloadcms/*/", "/payload/", "@lexical/*"],
+      "matchUpdateTypes": ["patch"],
+      "enabled": false
+    },
+    {
+      "groupName": "Lexical",
+      "matchPackageNames": ["@lexical/*"],
+      "enabled": false
+    },
+    {
+      "groupName": "Sharp",
+      "matchPackageNames": ["sharp"],
+      "automerge": false
+    }
+  ]
+}

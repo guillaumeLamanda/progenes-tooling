@@ -1,0 +1,55 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Base Renovate preset shared by progenes projects",
+  "extends": [
+    "config:best-practices",
+    ":dependencyDashboard",
+    "group:allDigest",
+    "group:monorepos",
+    "group:recommended",
+    "schedule:weekends",
+    ":automergeMinor"
+  ],
+  "prConcurrentLimit": 3,
+  "packageRules": [
+    {
+      "groupName": "non major",
+      "matchUpdateTypes": [
+        "minor",
+        "patch"
+      ]
+    },
+    {
+      "groupName": "PNPM",
+      "matchPackageNames": [
+        "/pnpm/"
+      ]
+    },
+    {
+      "groupName": "GitHub Actions",
+      "matchManagers": [
+        "github-actions"
+      ]
+    },
+    {
+      "groupName": "progenes tooling",
+      "matchPackageNames": [
+        "guillaumeLamanda/progenes-tooling",
+        "@progenes/biome-config"
+      ]
+    }
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Shared mise tasks included from progenes-tooling",
+      "managerFilePatterns": [
+        "/(^|/)mise(\\.[^/]+)?\\.toml$/"
+      ],
+      "matchStrings": [
+        "git::https://github\\.com/(?<depName>[^/]+/[^/]+?)\\.git//[^?\"]*\\?ref=(?<currentValue>v[0-9.]+)"
+      ],
+      "datasourceTemplate": "github-tags"
+    }
+  ]
+}

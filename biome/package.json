@@ -1,0 +1,14 @@
+{
+  "name": "@progenes/biome-config",
+  "version": "1.0.0",
+  "description": "Shared Biome configuration and anti-slop GritQL rules for progenes projects",
+  "type": "module",
+  "exports": {
+    "./base": "./base.jsonc",
+    "./anti-slop": "./anti-slop.jsonc"
+  },
+  "files": ["base.jsonc", "anti-slop.jsonc", "rules"],
+  "peerDependencies": {
+    "@biomejs/biome": ">=2.5.0"
+  }
+}

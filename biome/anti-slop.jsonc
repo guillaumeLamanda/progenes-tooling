@@ -1,0 +1,22 @@
+// Anti-slop GritQL rules.
+// Biome resolves paths in an extended config from the project's biome.json,
+// so plugin paths go through node_modules.
+// Plain strings only: Biome 2.5 silently skips `{ "path", "includes" }` entries.
+// Plugins from `extends` cannot be removed by the project; scope them with
+// `overrides` that disable the linter (e.g. generated or vendored code).
+{
+  "plugins": [
+    "./node_modules/@progenes/biome-config/rules/no-chained-type-assertions.grit",
+    "./node_modules/@progenes/biome-config/rules/no-conditional-empty-object-spread.grit",
+    "./node_modules/@progenes/biome-config/rules/no-known-value-widening.grit",
+    "./node_modules/@progenes/biome-config/rules/no-module-mocking.grit",
+    "./node_modules/@progenes/biome-config/rules/no-object-parameters.grit",
+    "./node_modules/@progenes/biome-config/rules/no-reflect-apply.grit",
+    "./node_modules/@progenes/biome-config/rules/no-reflect-get.grit",
+    "./node_modules/@progenes/biome-config/rules/no-runtime-typeof.grit",
+    "./node_modules/@progenes/biome-config/rules/no-shape-in-symbol-names.grit",
+    "./node_modules/@progenes/biome-config/rules/no-unknown-returns.grit",
+    "./node_modules/@progenes/biome-config/rules/no-unknown-type-aliases.grit",
+    "./node_modules/@progenes/biome-config/rules/no-unsafe-dictionary-type.grit"
+  ]
+}

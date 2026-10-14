@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+#MISE description="Point the env file at the database for the current git branch"
+#MISE alias="db"
+set -euo pipefail
+
+# main: pull env vars from Vercel.
+# other branches: create (or reuse) the Neon branch "${DB_BRANCH_PREFIX}<git branch>"
+# and write its connection strings into $DB_ENV_FILE.
+#
+# Config (set in the project's mise.toml [env]):
+#   NEON_PROJECT_ID     required
+#   NEON_PARENT_BRANCH  default: main
+#   DB_ENV_FILE         default: .env.local
+#   DB_BRANCH_PREFIX    default: preview/  (must match the neon-cleanup workflow)
+
+if [ -z "${NEON_PROJECT_ID:-}" ]; then
+	echo "❌ NEON_PROJECT_ID not set in mise.toml"
+	exit 1
+fi
+
+PROJECT_ID="$NEON_PROJECT_ID"
+PARENT="${NEON_PARENT_BRANCH:-main}"
+ENV_FILE="${DB_ENV_FILE:-.env.local}"
+CURRENT_BRANCH=$(git branch --show-current)
+
+if [ "$CURRENT_BRANCH" = "main" ]; then
+	echo "📥 On main branch - pulling env vars from Vercel..."
+	if ! vc env pull "$ENV_FILE" --yes 2>/dev/null; then
+		echo "❌ Failed to pull from Vercel. Are you authenticated? Run: vc login"
+		exit 1
+	fi
+	echo "✓ $ENV_FILE updated from Vercel"
+	exit 0
+fi
+
+NEON_BRANCH="${DB_BRANCH_PREFIX-preview/}${CURRENT_BRANCH}"
+NEON_BRANCH=$(LC_ALL=C; printf "%s" "${NEON_BRANCH//[^a-zA-Z0-9\/._-]/-}")
+
+echo "🔍 Checking Neon branch: $NEON_BRANCH"
+
+if neon branches list --project-id "$PROJECT_ID" --output json |
+	jq -e --arg name "$NEON_BRANCH" 'any(.[]; .name == $name)' >/dev/null; then
+	echo "♻️  Reusing existing Neon branch: $NEON_BRANCH"
+else
+	echo "🔨 Creating new Neon branch: $NEON_BRANCH from $PARENT..."
+	if ! neon branches create --project-id "$PROJECT_ID" --name "$NEON_BRANCH" --parent "$PARENT" >/dev/null; then
+		echo "❌ Failed to create Neon branch"
+		exit 1
+	fi
+	echo "✓ Neon branch created"
+fi
+
+echo "🔗 Fetching connection details..."
+POOLED=$(neon connection-string "$NEON_BRANCH" --project-id "$PROJECT_ID" --pooled)
+DIRECT=$(neon connection-string "$NEON_BRANCH" --project-id "$PROJECT_ID")
+
+# postgres(ql)://user:password@host/database?params
+URL_PATTERN='^postgres(ql)?://([^:]+):([^@]+)@([^/]+)/([^?]+)'
+if [[ ! "$DIRECT" =~ $URL_PATTERN ]]; then
+	echo "❌ Failed to parse connection string"
+	exit 1
+fi
+POSTGRES_USER=${BASH_REMATCH[2]}
+POSTGRES_PASSWORD=${BASH_REMATCH[3]}
+POSTGRES_HOST_UNPOOLED=${BASH_REMATCH[4]}
+POSTGRES_DATABASE=${BASH_REMATCH[5]}
+[[ "$POOLED" =~ $URL_PATTERN ]]
+POSTGRES_HOST=${BASH_REMATCH[4]}
+
+DIRECT_WITH_SSL=$DIRECT
+[[ "$DIRECT" == *sslmode=* ]] || DIRECT_WITH_SSL="${DIRECT}?sslmode=require"
+
+if [ ! -f "$ENV_FILE" ]; then
+	echo "⚠️  $ENV_FILE not found, creating it from .env..."
+	if [ -f .env ]; then cp .env "$ENV_FILE"; else touch "$ENV_FILE"; fi
+fi
+
+# Replace KEY=... in place, or append it when missing.
+set_env() {
+	local tmp
+	tmp=$(mktemp)
+	KEY=$1 VALUE=$2 awk '
+		BEGIN { line = ENVIRON["KEY"] "=\"" ENVIRON["VALUE"] "\"" }
+		index($0, ENVIRON["KEY"] "=") == 1 { print line; found = 1; next }
+		{ print }
+		END { if (!found) print line }
+	' "$ENV_FILE" >"$tmp"
+	cat "$tmp" >"$ENV_FILE"
+	rm "$tmp"
+}
+
+echo "📝 Updating $ENV_FILE..."
+# Superset of what Prisma, Drizzle and Payload projects read; extra keys are harmless.
+set_env DATABASE_URL "$POOLED"
+set_env DIRECT_DATABASE_URL "$DIRECT_WITH_SSL"
+set_env POSTGRES_URL "$POOLED"
+set_env POSTGRES_PRISMA_URL "$POOLED"
+set_env POSTGRES_URL_NON_POOLING "$DIRECT"
+set_env POSTGRES_DATABASE_URL "$POOLED"
+set_env POSTGRES_DATABASE_URL_UNPOOLED "$DIRECT"
+set_env POSTGRES_USER "$POSTGRES_USER"
+set_env POSTGRES_PASSWORD "$POSTGRES_PASSWORD"
+set_env POSTGRES_HOST "$POSTGRES_HOST"
+set_env POSTGRES_PGHOST_UNPOOLED "$POSTGRES_HOST_UNPOOLED"
+set_env POSTGRES_DATABASE "$POSTGRES_DATABASE"
+
+echo "✓ $ENV_FILE updated with Neon branch credentials"
+echo "  Branch: $NEON_BRANCH"
+echo "  Pooled Host: $POSTGRES_HOST"
+echo "  Direct Host: $POSTGRES_HOST_UNPOOLED"
+echo "  Database: $POSTGRES_DATABASE"

@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+#MISE description="List all Neon branches"
+set -euo pipefail
+
+neon branches list --project-id "$NEON_PROJECT_ID"
