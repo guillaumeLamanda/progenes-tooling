@@ -52,7 +52,7 @@ pnpm add -D "@progenes/biome-config@github:guillaumeLamanda/progenes-tooling#v1.
 ```
 
 - `base`: VCS, recommended rules, domains, organize imports. Formatting style stays per project.
-- `anti-slop`: GritQL rules in `biome/rules`. They apply to every linted file: Biome 2.5 ignores
+- `anti-slop`: GritQL rules in `biome/rules`, reported as warnings until existing violations are fixed. They apply to every linted file: Biome 2.5 ignores
   `{ "path", "includes" }` plugin entries and a project cannot remove inherited plugins.
   Exclude code with an override that sets `"linter": { "enabled": false }`.
 - CI must install dependencies before running Biome (`setup-biome` alone cannot resolve `extends`).

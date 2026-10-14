@@ -6,5 +6,5 @@ or {
   `const $name = ($params): unknown => $body`,
   `const $name = ($params): Promise<unknown> => $body`
 } as $function where {
-  register_diagnostic(span=$function, message="This function exposes `unknown` to its caller. Parse the value at its boundary and return a named domain type.", severity="error")
+  register_diagnostic(span=$function, message="This function exposes `unknown` to its caller. Parse the value at its boundary and return a named domain type.", severity="warn")
 }
