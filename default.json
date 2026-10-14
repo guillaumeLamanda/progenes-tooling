@@ -32,6 +32,18 @@
       ]
     },
     {
+      "groupName": "Effect-TS",
+      "matchPackageNames": [
+        "/effect/"
+      ]
+    },
+    {
+      "groupName": "Apollo client",
+      "matchPackageNames": [
+        "@apollo/*"
+      ]
+    },
+    {
       "groupName": "progenes tooling",
       "matchPackageNames": [
         "guillaumeLamanda/progenes-tooling",
