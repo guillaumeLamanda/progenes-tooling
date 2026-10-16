@@ -31,8 +31,46 @@ NEON_PROJECT_ID = "…"          # required
 # DB_BRANCH_PREFIX = "preview/" # must match the neon-cleanup workflow
 ```
 
-Tasks: `db:sync` (alias `db`), `db:status`, `db:list`, `db:delete`, `db:reset`, `db:cleanup`, `setup`, `uninstall`, `nvim:trust`.
+Tasks: `db:sync` (alias `db`), `db:status`, `db:list`, `db:delete`, `db:reset`, `db:cleanup`, `setup`, `uninstall`, `nvim:trust`, `worktree:cleanup`.
 They need `neon` (`npm:neonctl`), `vc`, `jq` and `hk` in the project's `[tools]`.
+
+### Worktree cleanup
+
+```sh
+mise run worktree:cleanup           # Tab to select, Enter to review, then confirm
+mise run worktree:cleanup --list    # Inspect without selecting or deleting
+mise run worktree:cleanup --dry-run # Select and preview without deleting
+```
+
+Requires `git`, `gh`, `jq`, and `fzf` on PATH, with `gh` authenticated for PR status.
+Lists all worktrees of the current repository with branch, clean/dirty status
+(including untracked files), PR number, PR state, removal eligibility, and path.
+The most recently updated same-repository PR for each branch is shown. `merged*`
+means local HEAD differs from the PR head, not that all local commits were merged.
+Failed GitHub lookups show `unknown`, not `none`.
+
+Primary, current, locked, prunable, bare, main/master/default-branch, dirty, and
+unreadable worktrees cannot be removed. Other worktrees can be selected regardless
+of PR state, but anything without a matching merged PR requires typing
+`remove unmerged` before the final confirmation. Status and HEAD are rechecked
+before each removal. The task never forces removal or deletes local/remote branches.
+
+Run regression tests with `mise run test`.
+
+## Development
+
+```sh
+mise trust
+mise install
+mise run ci    # All checks, also run by GitHub Actions on Linux and macOS
+mise run lint  # ShellCheck, actionlint, JSON validation
+mise run test  # Worktree cleanup regression tests, no GitHub credentials needed
+```
+
+The root `mise.toml` pins development tools. Repository-only checks live there,
+so projects importing `mise-tasks` do not inherit this repository's CI tasks.
+Tests use temporary repositories and mocked GitHub/selection commands. The test
+runner uses `/bin/bash` to check compatibility with macOS's bundled Bash.
 
 ## GitHub Actions
 

@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "${MOCK_GH_MODE:-}" = offline ]; then exit 1; fi
+if [ "$1 $2" = 'repo view' ]; then
+	jq -cn --arg branch "${MOCK_DEFAULT:-main}" '{nameWithOwner: "test/repo", defaultBranchRef: {name: $branch}}'
+	exit 0
+fi
+if [ "${MOCK_GH_MODE:-}" = pr-failure ]; then exit 1; fi
+branch=''
+while [ "$#" -gt 0 ]; do
+	if [ "$1" = --head ]; then branch=$2; break; fi
+	shift
+done
+head=$(git rev-parse "refs/heads/$branch")
+state=MERGED
+cross=false
+case "${MOCK_GH_MODE:-}" in
+	none) printf '[]\n'; exit 0 ;;
+	open) state=OPEN ;;
+	closed) state=CLOSED ;;
+	mismatch) head=0000000000000000000000000000000000000000 ;;
+	cross) cross=true ;;
+esac
+jq -cn --arg head "$head" --arg state "$state" --argjson cross "$cross" \
+	'[{number: 42, state: $state, headRefOid: $head, isCrossRepository: $cross, updatedAt: "2026-10-17T00:00:00Z"}]'
