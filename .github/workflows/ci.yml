@@ -32,13 +32,20 @@ jobs:
         with:
           version: 2026.10.10
 
+      - name: Identify runner image
+        id: runner_image
+        run: |
+          image_os=$(printenv ImageOS)
+          image_version=$(printenv ImageVersion)
+          printf 'version=%s-%s\n' "$image_os" "$image_version" >> "$GITHUB_OUTPUT"
+
       - name: Restore task freshness state
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ runner.temp }}/mise-task-state
-          key: task-state-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-${{ hashFiles('mise.toml', 'mise-tasks/**', 'tests/**', '.github/workflows/**', '.github/actionlint.*', '.shellcheckrc', '*.json', 'biome/package.json') }}
+          key: task-state-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.runner_image.outputs.version }}-${{ hashFiles('mise.toml', 'mise-tasks/**', 'tests/**', '.github/workflows/**', '.github/actionlint.*', '.shellcheckrc', '*.json', 'biome/package.json') }}
           restore-keys: |
-            task-state-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-
+            task-state-v2-${{ runner.os }}-${{ runner.arch }}-${{ steps.runner_image.outputs.version }}-
 
       - name: Run checks
         env:
