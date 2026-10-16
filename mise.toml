@@ -1,5 +1,8 @@
 min_version = "2026.4.16"
 
+[settings]
+task.source_freshness_hash_contents = true
+
 [tools]
 actionlint = "1.7.12"
 fzf = "0.74.5"
@@ -12,14 +15,20 @@ includes = ["mise-tasks"]
 
 [tasks."lint:shell"]
 description = "Check shared Bash tasks and test scripts with ShellCheck"
+sources = ["mise.toml", "mise-tasks/**/*", "tests/**/*", ".shellcheckrc"]
+outputs = { auto = true }
 run = "find mise-tasks tests -type f -exec shellcheck --severity=info {} +"
 
 [tasks."lint:actions"]
 description = "Validate GitHub Actions workflows with actionlint"
+sources = ["mise.toml", ".github/workflows/**/*", ".github/actionlint.*", ".shellcheckrc"]
+outputs = { auto = true }
 run = "actionlint"
 
 [tasks."lint:json"]
 description = "Validate Renovate presets and package JSON"
+sources = ["mise.toml", "default.json", "payload.json", "renovate.json", "biome/package.json"]
+outputs = { auto = true }
 run = "jq empty default.json payload.json renovate.json biome/package.json"
 
 [tasks.lint]
@@ -28,6 +37,8 @@ depends = ["lint:*"]
 
 [tasks.test]
 description = "Run worktree cleanup regression tests in temporary Git repositories"
+sources = ["mise.toml", "mise-tasks/worktree/cleanup", "tests/**/*"]
+outputs = { auto = true }
 run = "/bin/bash tests/worktree-cleanup.sh"
 
 [tasks.ci]

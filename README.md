@@ -72,6 +72,12 @@ so projects importing `mise-tasks` do not inherit this repository's CI tasks.
 Tests use temporary repositories and mocked GitHub/selection commands. The test
 runner uses `/bin/bash` to check compatibility with macOS's bundled Bash.
 
+Checks declare their input files and use content hashes with automatic success
+markers, so unchanged inputs skip subsequent runs. CI restores that state per
+OS, architecture, and runner image; changed inputs still rerun the affected checks.
+Use `mise run --force ci` to rerun everything. Tasks that inspect or mutate live
+Git/database state, including `worktree:cleanup`, are intentionally not cached.
+
 ## GitHub Actions
 
 | | Usage |

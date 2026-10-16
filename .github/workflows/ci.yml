@@ -32,5 +32,15 @@ jobs:
         with:
           version: 2026.10.10
 
+      - name: Restore task freshness state
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/mise-task-state
+          key: task-state-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-${{ hashFiles('mise.toml', 'mise-tasks/**', 'tests/**', '.github/workflows/**', '.github/actionlint.*', '.shellcheckrc', '*.json', 'biome/package.json') }}
+          restore-keys: |
+            task-state-v1-${{ runner.os }}-${{ runner.arch }}-${{ env.ImageOS }}-${{ env.ImageVersion }}-
+
       - name: Run checks
+        env:
+          MISE_STATE_DIR: ${{ runner.temp }}/mise-task-state
         run: mise run ci

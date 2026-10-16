@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 if [ "${MOCK_FZF_CANCEL:-}" = true ]; then exit 130; fi
+# Preserve the inventory IDs, just as the real selector does.
 while IFS= read -r row; do
 	if [[ "$row" == *"${MOCK_SELECT:-}"* ]]; then printf '%s\n' "$row"; fi
 done
