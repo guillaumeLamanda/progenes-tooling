@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "${MOCK_FZF_CANCEL:-}" = true ]; then exit 130; fi
+# Preserve the inventory IDs, just as the real selector does.
+while IFS= read -r row; do
+	if [[ "$row" == *"${MOCK_SELECT:-}"* ]]; then printf '%s\n' "$row"; fi
+done
+case "${MOCK_MUTATE:-}" in
+	dirty) printf 'changed\n' >"$MOCK_MUTATE_PATH/untracked" ;;
+	tracked) printf 'changed\n' >>"$MOCK_MUTATE_PATH/tracked" ;;
+	lock) git worktree lock "$MOCK_MUTATE_PATH" ;;
+	head) git -C "$MOCK_MUTATE_PATH" commit --quiet --allow-empty -m changed ;;
+esac

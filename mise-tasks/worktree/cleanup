@@ -1,0 +1,183 @@
+#!/usr/bin/env bash
+#MISE description="Select and remove clean worktrees, preserving local branches"
+#MISE interactive=true
+#MISE raw_args=true
+set -euo pipefail
+
+MODE=remove
+case "${1:-}" in
+	--list) MODE=list ;;
+	--dry-run) MODE=dry-run ;;
+	--help|-h)
+		printf 'Usage: mise run worktree:cleanup [--list|--dry-run]\n\nTab selects worktrees; Enter reviews the selection. Branches are never deleted.\n'
+		exit 0
+		;;
+	'') ;;
+	*) printf 'Unknown argument: %s\n' "$1" >&2; exit 1 ;;
+esac
+if [ "$#" -gt 1 ]; then
+	printf 'Expected at most one argument.\n' >&2
+	exit 1
+fi
+
+for tool in git jq gh; do
+	command -v "$tool" >/dev/null || { printf 'Missing dependency: %s\n' "$tool" >&2; exit 1; }
+done
+if [ "$MODE" != list ]; then
+	command -v fzf >/dev/null || { printf 'Missing dependency: fzf\n' >&2; exit 1; }
+fi
+git rev-parse --git-common-dir >/dev/null 2>&1 || { printf 'Run inside a Git repository.\n' >&2; exit 1; }
+
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/worktree-cleanup.XXXXXXXX")
+trap 'rm -f "$TMP"/*; rmdir "$TMP"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+CURRENT=$(
+	git rev-parse --show-toplevel 2>/dev/null || true
+	printf '.'
+)
+CURRENT=${CURRENT%.}
+CURRENT=${CURRENT%$'\n'}
+DEFAULT_BRANCH=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || true)
+DEFAULT_BRANCH=${DEFAULT_BRANCH#origin/}
+REPO=''
+if gh repo view --json nameWithOwner,defaultBranchRef >"$TMP/repo" 2>"$TMP/gh-error"; then
+	REPO=$(jq -r '.nameWithOwner' "$TMP/repo")
+	DEFAULT_BRANCH=$(jq -r --arg fallback "$DEFAULT_BRANCH" '.defaultBranchRef.name // $fallback' "$TMP/repo")
+else
+	printf 'GitHub unavailable; PR status will be unknown.\n' >&2
+fi
+
+# NUL-delimited porcelain preserves spaces, tabs and newlines in paths.
+scan_worktrees() {
+	local field path='' branch='' head='' locked=false bare=false prunable=false
+	local index=0 primary='' status changes reason
+	git worktree list --porcelain -z >"$TMP/porcelain"
+	while IFS= read -r -d '' field; do
+		case "$field" in
+			'worktree '*) path=${field#worktree } ;;
+			'HEAD '*) head=${field#HEAD } ;;
+			'branch '*) branch=${field#branch refs/heads/} ;;
+			locked|locked\ *) locked=true ;;
+			bare) bare=true ;;
+			prunable|prunable\ *) prunable=true ;;
+			'')
+				index=$((index + 1))
+				if [ "$index" -eq 1 ]; then primary=$path; fi
+				status=unknown
+				if [ "$bare" = false ] && [ "$prunable" = false ]; then
+					if changes=$(git -C "$path" status --porcelain=v1 --untracked-files=all --ignore-submodules=none 2>/dev/null); then
+						status=clean
+						if [ -n "$changes" ]; then status=dirty; fi
+					fi
+				fi
+				reason=''
+				if [ "$path" = "$primary" ]; then reason=primary
+				elif [ "$path" = "$CURRENT" ]; then reason=current
+				elif [ "$locked" = true ]; then reason=locked
+				elif [ "$bare" = true ]; then reason=bare
+				elif [ "$prunable" = true ]; then reason=prunable
+				elif [ "$branch" = main ] || [ "$branch" = master ] || { [ -n "$DEFAULT_BRANCH" ] && [ "$branch" = "$DEFAULT_BRANCH" ]; }; then reason=default-branch
+				elif [ "$status" != clean ]; then reason=$status
+				fi
+				jq -cn --argjson id "$index" --arg path "$path" --arg branch "$branch" --arg head "$head" \
+					--arg files "$status" --arg protected "$reason" \
+					'{id: $id, path: $path, branch: $branch, head: $head, files: $files, protected: $protected}'
+				path='' branch='' head='' locked=false bare=false prunable=false
+				;;
+		esac
+	done <"$TMP/porcelain"
+}
+
+scan_worktrees >"$TMP/local"
+while IFS= read -r entry; do
+	branch=$(jq -r '.branch' <<<"$entry")
+	pr='{"number":null,"state":"unknown","matches":false}'
+	if [ -n "$REPO" ] && [ -n "$branch" ]; then
+		if gh pr list --repo "$REPO" --head "$branch" --state all --limit 100 \
+			--json number,state,headRefOid,isCrossRepository,updatedAt >"$TMP/prs" 2>"$TMP/gh-error"; then
+			pr=$(jq -c --arg head "$(jq -r '.head' <<<"$entry")" '
+				map(select(.isCrossRepository == false)) | sort_by(.updatedAt) | last |
+				if . == null then {number: null, state: "none", matches: false}
+				else {number, state: (.state | ascii_downcase), matches: (.headRefOid == $head)} end
+			' "$TMP/prs")
+		else
+			printf 'PR lookup failed for %s; status is unknown.\n' "$branch" >&2
+		fi
+	fi
+	jq -c --argjson pr "$pr" '. + {pr: $pr}' <<<"$entry" >>"$TMP/inventory"
+done <"$TMP/local"
+
+# Only the numeric ID is parsed back from fzf. Display text is never a path source.
+jq -r '
+	def pad($n): . + (" " * ([$n - length, 0] | max));
+	def display: gsub("[\u0000-\u001f\u007f]"; "?");
+	(.branch | if . == "" then "(detached)" else display end) as $branch |
+	(if .pr.number then "#\(.pr.number)" elif .pr.state == "none" then "none" else "?" end) as $pr |
+	(.pr.state + (if .pr.number and (.pr.matches | not) then "*" else "" end)) as $state |
+	"\(.id)\t" + ([$branch | pad(24)] + [.files | pad(7)] + [$pr | pad(8)] + [$state | pad(10)] +
+		[(if .protected == "" then "selectable" else "blocked:" + .protected end) | pad(23)] + [.path | display] | join("  "))
+' "$TMP/inventory" >"$TMP/rows"
+HEADER='BRANCH                    FILES    PR        STATE       REMOVAL                  PATH'
+if [ "$MODE" = list ]; then
+	printf '%s\n' "$HEADER"
+	cut -f2- "$TMP/rows"
+	exit 0
+fi
+
+if fzf --multi --delimiter=$'\t' --with-nth=2.. --header="$HEADER
+Tab: select | Enter: review | Esc: cancel | *: local HEAD differs from PR head
+Blocked rows cannot be removed. Branches are always kept." <"$TMP/rows" >"$TMP/selected"; then
+	:
+else
+	code=$?
+	if [ "$code" -eq 1 ] || [ "$code" -eq 130 ]; then printf 'Cancelled.\n'; exit 0; fi
+	exit "$code"
+fi
+
+: >"$TMP/eligible"
+while IFS=$'\t' read -r id rest; do
+	entry=$(jq -c --arg id "$id" 'select((.id | tostring) == $id)' "$TMP/inventory")
+	[ -n "$entry" ] || continue
+	if [ "$(jq -r '.protected' <<<"$entry")" != '' ]; then
+		printf 'Skipping %s: %s\n' "$(jq -r '.path | @json' <<<"$entry")" "$(jq -r '.protected' <<<"$entry")"
+		continue
+	fi
+	printf '%s\n' "$entry" >>"$TMP/eligible"
+done <"$TMP/selected"
+if [ ! -s "$TMP/eligible" ]; then printf 'No removable worktrees selected.\n'; exit 0; fi
+
+printf 'Selected worktrees, local branches will be kept:\n'
+jq -r '"  " + (.path | @json) + " [PR: " + .pr.state + "]"' "$TMP/eligible"
+if jq -es 'any(.[]; .pr.state != "merged" or (.pr.matches | not))' "$TMP/eligible" >/dev/null; then
+	printf 'WARNING: some selections lack a merged PR matching local HEAD. Unpushed commits may exist.\n'
+	if [ "$MODE" != dry-run ]; then
+		printf 'Type "remove unmerged" to accept this risk: '
+		IFS= read -r reply || exit 0
+		if [ "$reply" != 'remove unmerged' ]; then printf 'Cancelled.\n'; exit 0; fi
+	fi
+fi
+if [ "$MODE" = dry-run ]; then printf 'Dry run: no worktrees removed.\n'; exit 0; fi
+printf 'Remove these worktrees? [y/N] '
+IFS= read -r reply || exit 0
+case "$reply" in y|Y|yes|YES) ;; *) printf 'Cancelled.\n'; exit 0 ;; esac
+
+deleted=0 failed=0
+while IFS= read -r entry; do
+	IFS= read -r -d '' path < <(jq -j '.path, "\u0000"' <<<"$entry")
+	scan_worktrees >"$TMP/recheck"
+	fresh=$(jq -c --arg path "$path" 'select(.path == $path)' "$TMP/recheck")
+	if [ -z "$fresh" ] || ! jq -e --argjson old "$entry" \
+		'.protected == "" and .head == $old.head and .branch == $old.branch' <<<"$fresh" >/dev/null; then
+		printf 'Refusing changed, missing, dirty or protected worktree: %s\n' "$(jq -r '.path | @json' <<<"$entry")" >&2
+		failed=$((failed + 1))
+	elif git worktree remove -- "$path"; then
+		printf 'Removed %s\n' "$(jq -r '.path | @json' <<<"$entry")"
+		deleted=$((deleted + 1))
+	else
+		printf 'Failed to remove %s\n' "$(jq -r '.path | @json' <<<"$entry")" >&2
+		failed=$((failed + 1))
+	fi
+done <"$TMP/eligible"
+printf 'Done: %s removed, %s failed. Local branches kept.\n' "$deleted" "$failed"
+[ "$failed" -eq 0 ]
