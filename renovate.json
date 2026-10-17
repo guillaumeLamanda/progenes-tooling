@@ -1,4 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["local>guillaumeLamanda/progenes-tooling"]
+  "extends": ["local>guillaumeLamanda/progenes-tooling"],
+  "description": "Automerge every update, majors included: CI lints and tests the repo, and consumers only pick changes up through tagged releases",
+  "automerge": true
 }
