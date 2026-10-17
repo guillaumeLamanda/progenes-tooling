@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -euo pipefail
+if [ "${MOCK_FZF_CANCEL:-}" = true ]; then exit 130; fi
+# Emit every row matching any space-separated MOCK_SELECT term, keeping the ID column.
+while IFS= read -r row; do
+	for term in ${MOCK_SELECT:-}; do
+		if [[ "$row" == *"$term"* ]]; then printf '%s\n' "$row"; break; fi
+	done
+done

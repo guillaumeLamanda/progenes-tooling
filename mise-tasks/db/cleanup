@@ -1,52 +1,102 @@
 #!/usr/bin/env bash
-#MISE description="Delete all archived Neon branches (--dry-run to preview)"
+#MISE description="Select and delete Neon branches (--list to inspect, --dry-run to preview)"
 #MISE alias="db:delete-archived"
+#MISE interactive=true
+#MISE raw_args=true
 set -euo pipefail
 
-PROJECT_ID="${NEON_PROJECT_ID}"
-DRY_RUN=false
-
-if [ "${1:-}" = "--dry-run" ]; then
-	DRY_RUN=true
-	echo "🔍 DRY RUN — no branches will be deleted"
+MODE=delete
+case "${1:-}" in
+	--list) MODE=list ;;
+	--dry-run) MODE=dry-run ;;
+	--help|-h)
+		printf 'Usage: mise run db:cleanup [--list|--dry-run]\n\nTab selects branches; Ctrl-A selects all visible rows; Enter reviews the selection.\nDefault and protected branches are never listed.\n'
+		exit 0
+		;;
+	'') ;;
+	*) printf 'Unknown argument: %s\n' "$1" >&2; exit 1 ;;
+esac
+if [ "$#" -gt 1 ]; then
+	printf 'Expected at most one argument.\n' >&2
+	exit 1
 fi
 
-echo "📋 Fetching archived Neon branches..."
+for tool in neon jq; do
+	command -v "$tool" >/dev/null || { printf 'Missing dependency: %s\n' "$tool" >&2; exit 1; }
+done
+if [ "$MODE" != list ]; then
+	command -v fzf >/dev/null || { printf 'Missing dependency: fzf\n' >&2; exit 1; }
+fi
+PROJECT_ID="${NEON_PROJECT_ID:?NEON_PROJECT_ID is not set}"
 
-ARCHIVED=$(neon branches list --project-id "$PROJECT_ID" --output json 2>/dev/null | jq -r '.[] | select(.current_state == "archived" and .name != "main") | .name')
+TMP=$(mktemp -d "${TMPDIR:-/tmp}/db-cleanup.XXXXXXXX")
+trap 'rm -f "$TMP"/*; rmdir "$TMP"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
-if [ -z "$ARCHIVED" ]; then
-	echo "✓ No archived branches found"
+printf 'Fetching Neon branches...\n'
+if ! neon branches list --project-id "$PROJECT_ID" --output json >"$TMP/branches" 2>"$TMP/neon-error"; then
+	printf 'Failed to list Neon branches:\n' >&2
+	cat "$TMP/neon-error" >&2
+	exit 1
+fi
+
+# Archived first, then least recently updated. Default and protected branches are never offered.
+jq -c '
+	map(select((.default // .primary // false) == false and (.protected // false) == false and .name != "main"))
+	| sort_by([(if .current_state == "archived" then 0 else 1 end), .updated_at])
+	| .[] | {id, name, state: (.current_state // "unknown"), updated: ((.updated_at // "") | .[0:10])}
+' "$TMP/branches" >"$TMP/inventory"
+if [ ! -s "$TMP/inventory" ]; then printf 'No deletable branches found.\n'; exit 0; fi
+
+# Only the branch ID is parsed back from fzf. Display text is never used as a delete target.
+jq -r '
+	def pad($n): . + (" " * ([$n - length, 0] | max));
+	def display: gsub("[\u0000-\u001f\u007f]"; "?");
+	"\(.id)\t" + ([.name | display | pad(48)] + [.state | pad(10)] + [.updated] | join("  "))
+' "$TMP/inventory" >"$TMP/rows"
+HEADER='BRANCH                                            STATE       UPDATED'
+if [ "$MODE" = list ]; then
+	printf '%s\n' "$HEADER"
+	cut -f2- "$TMP/rows"
 	exit 0
 fi
 
-COUNT=$(echo "$ARCHIVED" | wc -l | tr -d ' ')
-echo "Found $COUNT archived branch(es) to delete:"
-echo "$ARCHIVED" | sed 's/^/  - /'
-echo ""
-
-if [ "$DRY_RUN" = true ]; then
-	exit 0
+if fzf --multi --delimiter=$'\t' --with-nth=2.. --bind 'ctrl-a:select-all' --header="$HEADER
+Tab: select | Ctrl-A: select all visible | Enter: review | Esc: cancel
+Type \"archived\" then Ctrl-A to pick every archived branch." <"$TMP/rows" >"$TMP/selected"; then
+	:
+else
+	code=$?
+	if [ "$code" -eq 1 ] || [ "$code" -eq 130 ]; then printf 'Cancelled.\n'; exit 0; fi
+	exit "$code"
 fi
 
-read -p "Delete these $COUNT branches? [y/N] " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-	echo "Aborted"
-	exit 0
-fi
+: >"$TMP/eligible"
+while IFS=$'\t' read -r id _; do
+	jq -c --arg id "$id" 'select(.id == $id)' "$TMP/inventory" >>"$TMP/eligible"
+done <"$TMP/selected"
+if [ ! -s "$TMP/eligible" ]; then printf 'No branches selected.\n'; exit 0; fi
 
-FAILED=0
-while IFS= read -r branch; do
-	echo -n "🗑  Deleting $branch... "
-	if neon branches delete "$branch" --project-id "$PROJECT_ID" 2>/dev/null; then
-		echo "✓"
+COUNT=$(wc -l <"$TMP/eligible" | tr -d ' ')
+printf 'Selected %s branch(es):\n' "$COUNT"
+jq -r '"  - " + (.name | @json) + " [" + .state + "]"' "$TMP/eligible"
+if [ "$MODE" = dry-run ]; then printf 'Dry run: no branches deleted.\n'; exit 0; fi
+printf 'Delete these %s branch(es)? [y/N] ' "$COUNT"
+IFS= read -r reply || exit 0
+case "$reply" in y|Y|yes|YES) ;; *) printf 'Cancelled.\n'; exit 0 ;; esac
+
+deleted=0 failed=0
+while IFS= read -r entry; do
+	id=$(jq -r '.id' <<<"$entry")
+	name=$(jq -r '.name | @json' <<<"$entry")
+	if neon branches delete "$id" --project-id "$PROJECT_ID" >/dev/null 2>"$TMP/neon-error"; then
+		printf 'Deleted %s\n' "$name"
+		deleted=$((deleted + 1))
 	else
-		echo "❌"
-		FAILED=$((FAILED + 1))
+		printf 'Failed to delete %s: %s\n' "$name" "$(tr '\n' ' ' <"$TMP/neon-error")" >&2
+		failed=$((failed + 1))
 	fi
-done <<< "$ARCHIVED"
-
-DELETED=$((COUNT - FAILED))
-echo ""
-echo "Done: $DELETED deleted, $FAILED failed"
+done <"$TMP/eligible"
+printf 'Done: %s deleted, %s failed.\n' "$deleted" "$failed"
+[ "$failed" -eq 0 ]

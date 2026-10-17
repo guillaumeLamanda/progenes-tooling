@@ -34,6 +34,18 @@ NEON_PROJECT_ID = "…"          # required
 Tasks: `db:sync` (alias `db`), `db:status`, `db:list`, `db:delete`, `db:reset`, `db:cleanup`, `setup`, `uninstall`, `nvim:trust`, `worktree:cleanup`.
 They need `neon` (`npm:neonctl`), `vc`, `jq` and `hk` in the project's `[tools]`.
 
+### Neon branch cleanup
+
+```sh
+mise run db:cleanup           # Tab to select, Ctrl-A for all visible, Enter to review, then confirm
+mise run db:cleanup --list    # Inspect without selecting or deleting
+mise run db:cleanup --dry-run # Select and preview without deleting
+```
+
+Requires `neon`, `jq`, and `fzf`. Lists every Neon branch of `NEON_PROJECT_ID`
+except default and protected ones, archived branches first. Type `archived` then
+Ctrl-A to select every archived branch. Branches are deleted by ID.
+
 ### Worktree cleanup
 
 ```sh
@@ -64,7 +76,7 @@ mise trust
 mise install
 mise run ci    # All checks, also run by GitHub Actions on Linux and macOS
 mise run lint  # ShellCheck, actionlint, JSON validation
-mise run test  # Worktree cleanup regression tests, no GitHub credentials needed
+mise run test  # Worktree and Neon cleanup regression tests, no credentials needed
 ```
 
 The root `mise.toml` pins development tools. Repository-only checks live there,
