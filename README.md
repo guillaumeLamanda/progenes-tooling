@@ -9,7 +9,7 @@ Projects pin a release tag (`v1.0.0`); Renovate bumps it.
 { "extends": ["github>guillaumeLamanda/progenes-tooling", "github>guillaumeLamanda/progenes-tooling:payload"] }
 ```
 
-- `default.json`: base preset (best practices, weekend schedule, automerge minor, grouping: pnpm, GitHub Actions, Effect-TS, Apollo client). It also lets Renovate bump the mise `?ref=` below.
+- `default.json`: base preset (best practices, weekend schedule (open PRs are only rebased on weekends too), automerge minor, grouping: pnpm, GitHub Actions, Effect-TS, Apollo client). It also lets Renovate bump the mise `?ref=` below.
 - `payload.json`: Payload CMS / Lexical / Sharp rules.
 
 ## mise tasks

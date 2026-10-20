@@ -11,6 +11,7 @@
     ":automergeMinor"
   ],
   "prConcurrentLimit": 3,
+  "updateNotScheduled": false,
   "packageRules": [
     {
       "groupName": "non major",
