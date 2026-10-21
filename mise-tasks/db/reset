@@ -1,6 +1,16 @@
 #!/usr/bin/env bash
 #MISE description="Delete and recreate current branch's database"
 set -euo pipefail
+# shellcheck source=mise-tasks/db/_neon.sh
+source "${BASH_SOURCE[0]%/*}/_neon.sh"
+require_neon_project
 
-mise run db:delete
+NEON_BRANCH=$(neon_branch_name "$(git branch --show-current)")
+
+# db:delete fails on a missing branch; a reset should still create it
+if neon_branch_exists "$NEON_BRANCH"; then
+	mise run db:delete
+else
+	echo "ℹ️  No Neon branch $NEON_BRANCH yet, nothing to delete"
+fi
 mise run db:sync

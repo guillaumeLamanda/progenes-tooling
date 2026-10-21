@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+#MISE description="Stop worktrees under <main checkout>/.worktrees from loading the main checkout's mise config"
+set -euo pipefail
+
+# mise reads config from every parent directory, so a worktree under .worktrees/ also
+# loads the main checkout's mise.toml, .env.local and node_modules/.bin (ahead of its own
+# on PATH). ceiling_paths stops that lookup, but only from miserc.toml (mise.toml
+# [settings] is read too late) and only as an absolute path, hence a per-user setting.
+
+COMMON=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || {
+	echo "⚠️  Not in a Git repository, skipping worktree ceiling"
+	exit 0
+}
+CEILING="${COMMON%/.git}/.worktrees"
+MISERC="${MISE_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/mise}/miserc.toml"
+ENTRY="\"$CEILING\""
+
+if [ -f "$MISERC" ] && grep -qF -- "$ENTRY" "$MISERC"; then
+	echo "✓ $CEILING already in ceiling_paths ($MISERC)"
+	exit 0
+fi
+
+mkdir -p "$(dirname "$MISERC")"
+touch "$MISERC"
+if ! grep -q '^[[:space:]]*ceiling_paths[[:space:]]*=' "$MISERC"; then
+	printf 'ceiling_paths = [%s]\n' "$ENTRY" >>"$MISERC"
+elif grep -q '^[[:space:]]*ceiling_paths[[:space:]]*=[[:space:]]*\[.*\][[:space:]]*$' "$MISERC"; then
+	tmp=$(mktemp)
+	ENTRY=$ENTRY awk '
+		/^[[:space:]]*ceiling_paths[[:space:]]*=/ {
+			sub(/\][[:space:]]*$/, "")
+			print $0 (($0 ~ /\[[[:space:]]*$/) ? "" : ", ") ENVIRON["ENTRY"] "]"
+			next
+		}
+		{ print }
+	' "$MISERC" >"$tmp"
+	cat "$tmp" >"$MISERC"
+	rm "$tmp"
+else
+	echo "❌ $MISERC has a multi-line ceiling_paths; add $ENTRY to it by hand" >&2
+	exit 1
+fi
+echo "✓ Added $CEILING to ceiling_paths ($MISERC)"

@@ -10,6 +10,9 @@ mise install
 echo "🔗 Installing git hooks..."
 hk install --mise
 
+echo "🧱 Isolating worktrees from the main checkout's mise config..."
+mise run worktree:ceiling
+
 if [ -z "${NEON_PROJECT_ID:-}" ]; then
 	echo "❌ NEON_PROJECT_ID not set in mise.toml"
 	echo "   Find your project ID: neon projects list"

@@ -1,7 +1,7 @@
 # progenes-tooling
 
 Tooling shared by progenes projects (phoenix, cybelle, croisement-kiwi-france).
-Projects pin a release tag (`v1.0.0`); Renovate bumps it.
+Projects pin a release tag (`v1.2.0`); Renovate bumps it.
 
 ## Renovate presets
 
@@ -21,7 +21,7 @@ experimental = true # required for git:: task includes
 [task_config]
 includes = [
   "mise-tasks", # keep the project's own file tasks
-  "git::https://github.com/guillaumeLamanda/progenes-tooling.git//mise-tasks?ref=v1.0.0",
+  "git::https://github.com/guillaumeLamanda/progenes-tooling.git//mise-tasks?ref=v1.2.0",
 ]
 
 [env]
@@ -31,8 +31,21 @@ NEON_PROJECT_ID = "…"          # required
 # DB_BRANCH_PREFIX = "preview/" # must match the neon-cleanup workflow
 ```
 
-Tasks: `db:sync` (alias `db`), `db:status`, `db:list`, `db:delete`, `db:reset`, `db:cleanup`, `setup`, `uninstall`, `nvim:trust`, `worktree:cleanup`.
+Tasks: `db:sync` (alias `db`), `db:status`, `db:list`, `db:delete`, `db:reset`, `db:cleanup`, `setup`, `uninstall`, `nvim:trust`, `worktree:cleanup`, `worktree:ceiling`.
 They need `neon` (`npm:neonctl`), `vc`, `jq` and `hk` in the project's `[tools]`.
+The `db:*` tasks share helpers from `mise-tasks/db/_neon.sh` (not executable, so not a task).
+`db:reset` creates the Neon branch even when it doesn't exist yet.
+
+### Worktree isolation
+
+mise reads config from every parent directory, so a worktree under
+`<main checkout>/.worktrees/` also loads the main checkout's `mise.toml`,
+`.env.local`, `mise-tasks/` and `node_modules/.bin`, ahead of its own on PATH.
+`mise run worktree:ceiling` (also run by `setup`) adds that `.worktrees`
+directory to `ceiling_paths` in `~/.config/mise/miserc.toml`. The setting only
+works from `miserc.toml` and only as an absolute path, so it is per user, not
+committed. Check with `mise config ls` from a worktree: the main checkout's
+files must not be listed.
 
 ### Neon branch cleanup
 
@@ -94,16 +107,16 @@ Git/database state, including `worktree:cleanup`, are intentionally not cached.
 
 | | Usage |
 |---|---|
-| Delete Neon branch on PR close | `uses: guillaumeLamanda/progenes-tooling/.github/workflows/neon-cleanup.yml@v1.0.0` |
-| opencode on `/oc` comments | `uses: guillaumeLamanda/progenes-tooling/.github/workflows/opencode.yml@v1.0.0` |
-| pnpm + Node + install | `uses: guillaumeLamanda/progenes-tooling/actions/setup@v1.0.0` |
+| Delete Neon branch on PR close | `uses: guillaumeLamanda/progenes-tooling/.github/workflows/neon-cleanup.yml@v1.2.0` |
+| opencode on `/oc` comments | `uses: guillaumeLamanda/progenes-tooling/.github/workflows/opencode.yml@v1.2.0` |
+| pnpm + Node + install | `uses: guillaumeLamanda/progenes-tooling/actions/setup@v1.2.0` |
 
 Caller examples are at the top of each workflow file.
 
 ## Biome
 
 ```sh
-pnpm add -D "@progenes/biome-config@github:guillaumeLamanda/progenes-tooling#v1.0.0&path:/biome"
+pnpm add -D "@progenes/biome-config@github:guillaumeLamanda/progenes-tooling#v1.2.0&path:/biome"
 ```
 
 ```jsonc

@@ -13,10 +13,9 @@ set -euo pipefail
 #   DB_ENV_FILE         default: .env.local
 #   DB_BRANCH_PREFIX    default: preview/  (must match the neon-cleanup workflow)
 
-if [ -z "${NEON_PROJECT_ID:-}" ]; then
-	echo "❌ NEON_PROJECT_ID not set in mise.toml"
-	exit 1
-fi
+# shellcheck source=mise-tasks/db/_neon.sh
+source "${BASH_SOURCE[0]%/*}/_neon.sh"
+require_neon_project
 
 PROJECT_ID="$NEON_PROJECT_ID"
 PARENT="${NEON_PARENT_BRANCH:-main}"
@@ -33,13 +32,11 @@ if [ "$CURRENT_BRANCH" = "main" ]; then
 	exit 0
 fi
 
-NEON_BRANCH="${DB_BRANCH_PREFIX-preview/}${CURRENT_BRANCH}"
-NEON_BRANCH=$(LC_ALL=C; printf "%s" "${NEON_BRANCH//[^a-zA-Z0-9\/._-]/-}")
+NEON_BRANCH=$(neon_branch_name "$CURRENT_BRANCH")
 
 echo "🔍 Checking Neon branch: $NEON_BRANCH"
 
-if neon branches list --project-id "$PROJECT_ID" --output json |
-	jq -e --arg name "$NEON_BRANCH" 'any(.[]; .name == $name)' >/dev/null; then
+if neon_branch_exists "$NEON_BRANCH"; then
 	echo "♻️  Reusing existing Neon branch: $NEON_BRANCH"
 else
 	echo "🔨 Creating new Neon branch: $NEON_BRANCH from $PARENT..."

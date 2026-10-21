@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 #MISE description="Delete current branch's Neon database"
 set -euo pipefail
+# shellcheck source=mise-tasks/db/_neon.sh
+source "${BASH_SOURCE[0]%/*}/_neon.sh"
+require_neon_project
 
 CURRENT_BRANCH=$(git branch --show-current)
 
@@ -9,8 +12,7 @@ if [ "$CURRENT_BRANCH" = "main" ]; then
 	exit 1
 fi
 
-NEON_BRANCH="${DB_BRANCH_PREFIX-preview/}${CURRENT_BRANCH}"
-NEON_BRANCH=$(LC_ALL=C; printf "%s" "${NEON_BRANCH//[^a-zA-Z0-9\/._-]/-}")
+NEON_BRANCH=$(neon_branch_name "$CURRENT_BRANCH")
 
 if neon branches delete "$NEON_BRANCH" --project-id "$NEON_PROJECT_ID"; then
 	echo "✓ Deleted Neon branch: $NEON_BRANCH"
