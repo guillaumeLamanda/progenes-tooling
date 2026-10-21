@@ -36,10 +36,15 @@ description = "Run all repository linters"
 depends = ["lint:*"]
 
 [tasks.test]
-description = "Run worktree and Neon cleanup regression tests against mocked CLIs"
-sources = ["mise.toml", "mise-tasks/worktree/cleanup", "mise-tasks/db/cleanup", "tests/**/*"]
+description = "Run worktree, Neon and ceiling regression tests against mocked CLIs"
+sources = ["mise.toml", "mise-tasks/worktree/*", "mise-tasks/db/cleanup", "mise-tasks/db/_neon.sh", "tests/**/*"]
 outputs = { auto = true }
-run = ["/bin/bash tests/worktree-cleanup.sh", "/bin/bash tests/db-cleanup.sh"]
+run = [
+  "/bin/bash tests/worktree-cleanup.sh",
+  "/bin/bash tests/db-cleanup.sh",
+  "/bin/bash tests/neon-lib.sh",
+  "/bin/bash tests/worktree-ceiling.sh",
+]
 
 [tasks.ci]
 description = "Run the same lint and regression checks as GitHub Actions"

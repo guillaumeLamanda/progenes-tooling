@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 #MISE description="Show current database branch info"
 set -euo pipefail
+# shellcheck source=mise-tasks/db/_neon.sh
+source "${BASH_SOURCE[0]%/*}/_neon.sh"
+require_neon_project
 
 CURRENT_BRANCH=$(git branch --show-current)
 echo "Git branch: $CURRENT_BRANCH"
@@ -10,12 +13,10 @@ if [ "$CURRENT_BRANCH" = "main" ]; then
 	exit 0
 fi
 
-NEON_BRANCH="${DB_BRANCH_PREFIX-preview/}${CURRENT_BRANCH}"
-NEON_BRANCH=$(LC_ALL=C; printf "%s" "${NEON_BRANCH//[^a-zA-Z0-9\/._-]/-}")
+NEON_BRANCH=$(neon_branch_name "$CURRENT_BRANCH")
 echo "Neon branch: $NEON_BRANCH"
 
-if neon branches list --project-id "$NEON_PROJECT_ID" --output json |
-	jq -e --arg name "$NEON_BRANCH" 'any(.[]; .name == $name)' >/dev/null; then
+if neon_branch_exists "$NEON_BRANCH"; then
 	echo "Status: exists"
 else
 	echo "Status: not created yet"

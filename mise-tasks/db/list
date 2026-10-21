@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 #MISE description="List all Neon branches"
 set -euo pipefail
+# shellcheck source=mise-tasks/db/_neon.sh
+source "${BASH_SOURCE[0]%/*}/_neon.sh"
+require_neon_project
 
 neon branches list --project-id "$NEON_PROJECT_ID"
