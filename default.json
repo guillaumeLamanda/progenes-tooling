@@ -39,6 +39,12 @@
       ]
     },
     {
+      "groupName": "Yoga",
+      "matchPackageNames": [
+        "/yoga/"
+      ]
+    },
+    {
       "groupName": "Apollo client",
       "matchPackageNames": [
         "@apollo/*"
