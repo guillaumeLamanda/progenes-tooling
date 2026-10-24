@@ -41,7 +41,8 @@
     {
       "groupName": "Yoga",
       "matchPackageNames": [
-        "/yoga/"
+        "/yoga/",
+        "/envelop/"
       ]
     },
     {
