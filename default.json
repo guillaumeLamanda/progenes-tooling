@@ -43,6 +43,9 @@
       "matchPackageNames": [
         "/yoga/",
         "/envelop/"
+      ],
+      "matchUpdateTypes": [
+        "major"
       ]
     },
     {
