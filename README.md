@@ -108,7 +108,7 @@ Git/database state, including `worktree:cleanup`, are intentionally not cached.
 | | Usage |
 |---|---|
 | Delete Neon branch on PR close | `uses: guillaumeLamanda/progenes-tooling/.github/workflows/neon-cleanup.yml@v1.2.0` |
-| opencode on `/oc` comments | `uses: guillaumeLamanda/progenes-tooling/.github/workflows/opencode.yml@v1.2.0` |
+| opencode on `/oc` comments | `uses: guillaumeLamanda/progenes-tooling/.github/workflows/opencode.yml@v2.0.0` |
 | pnpm + Node + install | `uses: guillaumeLamanda/progenes-tooling/actions/setup@v1.2.0` |
 
 Caller examples are at the top of each workflow file.

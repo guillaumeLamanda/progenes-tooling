@@ -1,14 +1,18 @@
 name: opencode
 
+# Runs opencode v2 on `/oc` or `/opencode` comments and replies with the result.
+# The official `anomalyco/opencode/github` action only ships opencode v1
+# (`opencode github run` does not exist in v2), so this installs the v2 CLI and
+# calls `opencode run` directly. It replies with a comment; it does not push.
+#
 # Caller (on: issue_comment / pull_request_review_comment, types: [created]):
 #   jobs:
 #     opencode:
-#       uses: guillaumeLamanda/progenes-tooling/.github/workflows/opencode.yml@v1
+#       uses: guillaumeLamanda/progenes-tooling/.github/workflows/opencode.yml@v2.0.0
 #       permissions:
-#         id-token: write
 #         contents: read
-#         pull-requests: read
-#         issues: read
+#         pull-requests: write
+#         issues: write
 #       with:
 #         model: vercel/deepseek/deepseek-v4-pro
 #       secrets:
@@ -20,6 +24,10 @@ on:
       model:
         required: true
         type: string
+      opencode-version:
+        required: false
+        type: string
+        default: 2.2.6
     secrets:
       AI_GATEWAY_API_KEY:
         required: true
@@ -27,25 +35,67 @@ on:
 jobs:
   opencode:
     if: |
-      contains(github.event.comment.body, ' /oc') ||
-      startsWith(github.event.comment.body, '/oc') ||
-      contains(github.event.comment.body, ' /opencode') ||
-      startsWith(github.event.comment.body, '/opencode')
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
+      (
+        contains(github.event.comment.body, ' /oc') ||
+        startsWith(github.event.comment.body, '/oc') ||
+        contains(github.event.comment.body, ' /opencode') ||
+        startsWith(github.event.comment.body, '/opencode')
+      )
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
-      id-token: write
       contents: read
-      pull-requests: read
-      issues: read
+      pull-requests: write
+      issues: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
+      - name: Install opencode
+        env:
+          OPENCODE_VERSION: ${{ inputs.opencode-version }}
+        run: npm install --global "@opencode/cli@${OPENCODE_VERSION}"
+
       - name: Run opencode
-        uses: anomalyco/opencode/github@77fc88c8ade8e5a620ebbe1197f3a572d29ae91a # latest
         env:
           AI_GATEWAY_API_KEY: ${{ secrets.AI_GATEWAY_API_KEY }}
-        with:
-          model: ${{ inputs.model }}
+          GH_TOKEN: ${{ github.token }}
+          MODEL: ${{ inputs.model }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+          COMMENT_URL: ${{ github.event.comment.html_url }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          COMMENT_PATH: ${{ github.event.comment.path }}
+          COMMENT_DIFF_HUNK: ${{ github.event.comment.diff_hunk }}
+        run: |
+          {
+            echo "You were mentioned in a GitHub comment on $REPO #$NUMBER ($EVENT)."
+            echo "Comment: $COMMENT_URL"
+            [ -n "$COMMENT_PATH" ] && echo "File: $COMMENT_PATH"
+            [ -n "$COMMENT_DIFF_HUNK" ] && printf 'Diff hunk:\n%s\n' "$COMMENT_DIFF_HUNK"
+            echo
+            echo "Use the gh CLI (read-only) to read the issue or PR, its diff and comments as needed."
+            echo "Do not edit files or push. Answer the request below in Markdown; your final message is posted as a reply."
+            echo
+            printf 'Request:\n%s\n' "$COMMENT_BODY"
+          } > "$RUNNER_TEMP/prompt.md"
+          opencode run --standalone --auto --format json --model "$MODEL" \
+            --title "$REPO#$NUMBER" "$(cat "$RUNNER_TEMP/prompt.md")" \
+            > "$RUNNER_TEMP/events.jsonl"
+          # Keep only the text of the last assistant message.
+          jq -rs '[.[] | select(.type == "text")]
+            | (last.part.messageID // "") as $m
+            | map(select(.part.messageID == $m) | .part.text) | join("")' \
+            "$RUNNER_TEMP/events.jsonl" > "$RUNNER_TEMP/reply.md"
+
+      - name: Post reply
+        if: always() && hashFiles(format('{0}/reply.md', runner.temp)) != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ github.event.issue.number || github.event.pull_request.number }}
+        run: gh issue comment "$NUMBER" --repo "$REPO" --body-file "$RUNNER_TEMP/reply.md"
