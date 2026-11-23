@@ -9,6 +9,6 @@
   },
   "files": ["base.jsonc", "anti-slop.jsonc", "rules"],
   "peerDependencies": {
-    "@biomejs/biome": ">=2.5.0"
+    "@biomejs/biome": ">=2.6.8"
   }
 }
